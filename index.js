@@ -12,7 +12,7 @@ util.inherits(Yeelight, EventEmitter);
 var dgram = require('dgram');
 var socket = dgram.createSocket('udp4');
 
-// yeelight networking 
+// yeelight networking
 var net = require('net');
 
 function Yeelight() {
@@ -63,6 +63,13 @@ Yeelight.prototype.connect = function(device) {
 
 			this.emit('deviceconnected', device);
 		}.bind(this));
+
+		device.socket.on('close', function() {
+			device.socket.destroy();
+			this.emit('devicedisconnected', device);
+			device.connected = false;
+			device.socket = null
+		}.bind(this));
 	}
 };
 
@@ -97,6 +104,8 @@ Yeelight.prototype.handleDiscovery = function(message, address) {
 			device.brightness = headers[i].slice(8);
 		if (headers[i].indexOf("model:") >= 0)
 			device.model = headers[i].slice(7);
+		if (headers[i].indexOf("rgb:") >= 0)
+			device.rgb = headers[i].slice(5);
 		if (headers[i].indexOf("hue:") >= 0)
 			device.hue = headers[i].slice(5);
 		if (headers[i].indexOf("sat:") >= 0)
@@ -110,33 +119,33 @@ Yeelight.prototype.addDevice = function(device) {
 	// check if device exists in array
 	if (_.filter(this.devices, {
 		id: device.id
-    }).length > 0) {
+	}).length > 0) {
 		// check if existing object is exactly the same as the device we're passing it
 		if (_.isEqual(device, _.filter(this.devices, {
-	        id: device.id
-	      }))) {
-	      // don't do anything else
-	      return;
-	    }
+			id: device.id
+		}))) {
+			// don't do anything else
+			return;
+		}
 
-	    // get our device from the list
-	    var dev = _.filter(this.devices, {
-        	id: device.id
-      	});
+		// get our device from the list
+		var dev = _.filter(this.devices, {
+			id: device.id
+		});
 
-	    // overwrite the device
-      	dev = device;
-      	this.emit('deviceupdated', device);
-	} 
+		// overwrite the device
+		dev = device;
+		this.emit('deviceupdated', device);
+	}
 	// if device isn't in list
 	else {
 		// push new device into array
-    	this.devices.push(device);
-    	this.emit('deviceadded', device);
+		this.devices.push(device);
+		this.emit('deviceadded', device);
 	}
 };
 
-Yeelight.prototype.setPower = function(device, state, speed) {	
+Yeelight.prototype.setPower = function(device, state, speed) {
 	speed = speed || 300;
 
 	var on_off = state === true ? 'on' : 'off';
@@ -178,7 +187,7 @@ Yeelight.prototype.sendCommand = function(device, command, callback) {
 	if (device.connected === false && device.socket === null) {
 		console.log('Connection broken ' + device.connected + '\n' + device.socket);
 		this.emit('devicedisconnected', device);
-	    return;
+		return;
 	}
 
 	var message = JSON.stringify(command);
@@ -189,6 +198,26 @@ Yeelight.prototype.sendCommand = function(device, command, callback) {
 		callback(device);
 	}
 };
+
+Yeelight.prototype.setRGB = function(device, rgb, speed) {
+	speed = speed || 300;
+	device.rgb = rgb;
+
+	var request = {
+		id: 1,
+		method: 'set_rgb',
+		params: [
+			rgb,
+			'smooth',
+			speed,
+		],
+	};
+
+	this.sendCommand(device, request, function(device) {
+		this.emit('rgbupdated', device);
+	}.bind(this));
+};
+
 
 Yeelight.prototype.devices = [];
 
